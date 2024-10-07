@@ -1,6 +1,7 @@
 import { useState } from "react";
 import pdfToText from "react-pdftotext";
-import "./NamedEntityVerifier.css"; // Importing external CSS
+import Tesseract from "tesseract.js";
+import "./NamedEntityVerifier.css";
 
 const NamedEntityVerifier = () => {
     const [formData, setFormData] = useState({
@@ -9,8 +10,8 @@ const NamedEntityVerifier = () => {
         dob: "",
         aadhaarNumber: "",
     });
-    const [pdfFile, setPdfFile] = useState(null);
-    const [pdfText, setPdfText] = useState("");
+    const [file, setFile] = useState(null); // Handles both PDF and image
+    const [extractedText, setExtractedText] = useState("");
     const [error, setError] = useState("");
 
     const handleInputChange = (e) => {
@@ -22,24 +23,54 @@ const NamedEntityVerifier = () => {
 
     const handleFileInput = (event) => {
         const file = event.target.files[0];
-        setPdfFile(file);
+        setFile(file);
+    };
+
+    const extractTextFromFile = async (file) => {
+        const fileType = file.type;
+
+        // Handle PDF files
+        if (fileType === "application/pdf") {
+            try {
+                const text = await pdfToText(file);
+                return text;
+            } catch (error) {
+                throw new Error("Error extracting text from PDF.");
+            }
+        }
+
+        // Handle Image files
+        if (fileType.startsWith("image/")) {
+            try {
+                const { data: { text } } = await Tesseract.recognize(
+                    file,
+                    'eng', // Language for OCR
+                    { logger: (m) => console.log(m) } // Optional logging
+                );
+                return text;
+            } catch (error) {
+                throw new Error("Error extracting text from image.");
+            }
+        }
+
+        throw new Error("Unsupported file type.");
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!pdfFile) {
-            setError("Please select a valid PDF file.");
+        if (!file) {
+            setError("Please select a valid file (PDF or image).");
             return;
         }
 
         try {
-            const text = await pdfToText(pdfFile);
-            setPdfText(text);
+            const text = await extractTextFromFile(file);
+            setExtractedText(text);
 
             const requestData = {
                 formData,
-                pdfText: text,
+                extractedText: text,
             };
 
             const response = await fetch("http://localhost:5000/verify", {
@@ -57,7 +88,7 @@ const NamedEntityVerifier = () => {
                 alert(`Verification failed: ${result.message}`);
             }
         } catch (error) {
-            setError("Error during PDF text extraction or submission: " + error.message);
+            setError("Error during text extraction or submission: " + error.message);
         }
     };
 
@@ -77,7 +108,7 @@ const NamedEntityVerifier = () => {
                     />
                 </fieldset>
                 <fieldset>
-                    <label htmlFor="fatherName">Father's Name</label>
+                    <label htmlFor="fatherName">Father&apos;s Name</label>
                     <input
                         type="text"
                         id="fatherName"
@@ -109,11 +140,11 @@ const NamedEntityVerifier = () => {
                     />
                 </fieldset>
                 <fieldset>
-                    <label htmlFor="pdfFile">Upload Aadhaar PDF</label>
+                    <label htmlFor="file">Upload Aadhaar PDF/Image</label>
                     <input
                         type="file"
-                        id="pdfFile"
-                        accept="application/pdf"
+                        id="file"
+                        accept="application/pdf, image/*"
                         onChange={handleFileInput}
                     />
                 </fieldset>
@@ -121,10 +152,10 @@ const NamedEntityVerifier = () => {
             </form>
 
             {error && <p className="error-message">{error}</p>}
-            {pdfText && (
-                <div className="pdf-output">
-                    <h3>Extracted PDF Text:</h3>
-                    <pre>{pdfText}</pre>
+            {extractedText && (
+                <div className="text-output">
+                    <h3>Extracted Text:</h3>
+                    <pre>{extractedText}</pre>
                 </div>
             )}
         </div>
