@@ -10,7 +10,8 @@ const NamedEntityVerifier = () => {
         dob: "",
         aadhaarNumber: "",
     });
-    const [file, setFile] = useState(null); // Handles both PDF and image
+    const [file, setFile] = useState(null);
+    const [docType, setDocType] = useState("aadhaar"); // Default doc type
     const [extractedText, setExtractedText] = useState("");
     const [error, setError] = useState("");
 
@@ -26,41 +27,29 @@ const NamedEntityVerifier = () => {
         setFile(file);
     };
 
+    const handleDocTypeChange = (event) => {
+        setDocType(event.target.value); // Set selected document type
+    };
+
     const extractTextFromFile = async (file) => {
         const fileType = file.type;
 
-        // Handle PDF files
         if (fileType === "application/pdf") {
-            try {
-                const text = await pdfToText(file);
-                return text;
-            } catch (error) {
-                throw new Error("Error extracting text from PDF.");
-            }
+            const text = await pdfToText(file);
+            return text;
+        } else if (fileType.startsWith("image/")) {
+            const { data: { text } } = await Tesseract.recognize(file, 'eng');
+            return text;
+        } else {
+            throw new Error("Unsupported file type.");
         }
-
-        // Handle Image files
-        if (fileType.startsWith("image/")) {
-            try {
-                const { data: { text } } = await Tesseract.recognize(
-                    file,
-                    'eng', // Language for OCR
-                    { logger: (m) => console.log(m) } // Optional logging
-                );
-                return text;
-            } catch (error) {
-                throw new Error("Error extracting text from image.");
-            }
-        }
-
-        throw new Error("Unsupported file type.");
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         if (!file) {
-            setError("Please select a valid file (PDF or image).");
+            setError("Please select a valid file.");
             return;
         }
 
@@ -70,6 +59,7 @@ const NamedEntityVerifier = () => {
 
             const requestData = {
                 formData,
+                docType, // Send document type
                 extractedText: text,
             };
 
@@ -96,6 +86,14 @@ const NamedEntityVerifier = () => {
         <div className="container">
             <h2>Named Entity Verifier</h2>
             <form onSubmit={handleSubmit} className="verifier-form">
+                <fieldset>
+                    <label htmlFor="docType">Select Document Type</label>
+                    <select id="docType" value={docType} onChange={handleDocTypeChange}>
+                        <option value="aadhaar">Aadhaar</option>
+                        <option value="pan">PAN Card</option>
+                        <option value="marksheet">12th Marksheet</option>
+                    </select>
+                </fieldset>
                 <fieldset>
                     <label htmlFor="name">Name</label>
                     <input
